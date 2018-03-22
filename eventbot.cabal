@@ -45,7 +45,8 @@ executable eventbot-exe
       base >=4.7 && <5
     , eventbot
     , gogol-apps-calendar
---    , discord-hs
+    , discord-hs
+    , sqlite-simple
   other-modules:
       Paths_eventbot
   default-language: Haskell2010
