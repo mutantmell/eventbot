@@ -1,0 +1,3 @@
+[submodule "gogol"]
+	path = gogol
+	url = https://github.com/mutantmell/gogol.git
