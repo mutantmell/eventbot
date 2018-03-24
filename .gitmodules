@@ -1,3 +1,6 @@
 [submodule "gogol"]
 	path = gogol
 	url = https://github.com/mutantmell/gogol.git
+[submodule "discord"]
+	path = discord
+	url = https://github.com/mutantmell/Discord.hs.git
