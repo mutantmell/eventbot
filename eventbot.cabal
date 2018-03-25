@@ -60,6 +60,7 @@ executable eventbot-exe
     , wuss
     , string-conversions
     , pipes
+    , optparse-applicative
   other-modules:
       Paths_eventbot
   default-language: Haskell2010

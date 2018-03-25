@@ -24,13 +24,19 @@ import qualified Network.Discord as D
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Char as C
+
+import qualified Database.SQLite.Simple as SQL
+import qualified Database.SQLite.Simple.FromRow as SQL
 
 import Data.String.Conversions
 
 import Control.Lens.Getter
 
+import Control.Applicative
 import Control.Exception
 import Data.Either
+import Data.Functor
 import GHC.Generics
 
 data UriParseException = UriParseException BS.ByteString
@@ -62,23 +68,41 @@ data DiscordConf = DiscordConf
   { oauth :: !OAuth.OAuth2
   } deriving (Eq)
 
+data Command = EventCommand EventSubCommand
+  deriving (Eq, Show)
 
---gatewayUri = mkURI "wss://gateway.discord.gg/?v=6&encoding=json"
+data EventSubCommand = GetEvents 
+                     | CreateEvent
+  deriving (Eq, Show)
 
--- mkClient uri = runSecureClient uri 443 "/?v=6&encoding=json"
+command :: Text -> Maybe Command
+command str = case arguments of
+  ("!event":rest) -> EventCommand <$> eventSubCommand rest
+  where
+    arguments = T.split C.isSpace str
+    eventSubCommand :: [Text] -> Maybe EventSubCommand
+    eventSubCommand ("all":[])    = Just GetEvents
+    eventSubCommand ("create":_) = Just CreateEvent
+    eventSubCommand _            = Nothing
 
 
 reply :: D.Message -> Text -> P.Effect D.DiscordM ()
 reply D.Message{D.messageChannel=chan} cont = D.fetch' $ D.CreateMessage chan cont Nothing
 
+discord :: D.DiscordBot D.BotClient ()
+discord = do
+  D.with D.ReadyEvent $ \(D.Init v u _ _ _) ->
+    D.liftIO $ putStrLn $ "Connected to gateway v" ++ show v ++ " as user " ++ show u
+
+  D.with D.MessageCreateEvent $ \msg@D.Message{..} -> do 
+    D.when (not $ D.userIsBot messageAuthor) $ do
+      D.when ("Ping" `T.isPrefixOf` messageContent) $
+        reply msg "Pong!"
+      D.when ("!" `T.isPrefixOf` messageContent) $
+        mapM_ (reply msg) ((convertString . show) <$> command messageContent)
+
 main :: IO ()
 main = do
   config <- Config.load [ Config.Required $ "." </> "conf" </> "discord.conf" ]
   botToken <- Config.require config "bot-token"
-  D.runBot (D.Bot botToken) $ do
-    D.with D.ReadyEvent $ \(D.Init v u _ _ _) ->
-      D.liftIO $ putStrLn $ "Connected to gateway v" ++ show v ++ " as user " ++ show u
-
-    D.with D.MessageCreateEvent $ \msg@D.Message{..} -> do 
-      D.when ("Ping" `T.isPrefixOf` messageContent && (not . D.userIsBot $ messageAuthor)) $
-        reply msg "Pong!"
+  D.runBot (D.Bot botToken) discord
