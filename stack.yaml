@@ -38,6 +38,7 @@ resolver: lts-11.1
 packages:
 - .
 - gogol/core
+- gogol/gogol
 - gogol/gogol-apps-calendar
 - discord/
 # Dependency packages to be pulled from upstream that are not in the resolver

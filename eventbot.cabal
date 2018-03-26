@@ -46,6 +46,7 @@ executable eventbot-exe
     , lens
     , eventbot
     , discord-hs
+    , gogol
     , gogol-apps-calendar
     , sqlite-simple
     , text
@@ -55,12 +56,15 @@ executable eventbot-exe
     , filepath
     , http-client
     , http-client-tls
+    , http-conduit
     , uri-bytestring
     , bytestring
     , wuss
     , string-conversions
     , pipes
     , optparse-applicative
+    , aeson
+    , aeson-pretty
   other-modules:
       Paths_eventbot
   default-language: Haskell2010
