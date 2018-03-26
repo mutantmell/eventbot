@@ -51,6 +51,7 @@ import Control.Lens
 
 import Control.Applicative
 import Control.Exception
+import Control.Monad
 import Data.Either
 import Data.Functor
 import GHC.Generics
@@ -122,6 +123,11 @@ main = do
   lgr <- Google.newLogger Google.Debug stdout
   mgr <- liftIO (newManager tlsManagerSettings)
   env <- Google.newEnvWith credentials lgr mgr <&> (Google.envScopes .~ Calendar.calendarScope)
+  when (argsInit) $ Google.runResourceT . Google.runGoogle env $ do
+    calendarName <- liftIO $ (Config.require config "google.calendar-name" :: IO Text)
+    let newCalendar = Calendar.calendar & Calendar.calSummary .~ Just calendarName
+        request = Calendar.calendarsInsert newCalendar
+    Google.send request $> ()
   out <- Google.runResourceT . Google.runGoogle env $ do
     Google.send Calendar.calendarListList
   mapM_ (TL.putStrLn . TL.toLazyText . Pretty.encodePrettyToTextBuilder) $ out ^. Calendar.clItems
