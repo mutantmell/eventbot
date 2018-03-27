@@ -39,6 +39,7 @@ import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy.IO as TL
 import qualified Data.Text.Lazy.Builder as TL
 import qualified Data.Char as C
+import qualified Data.Foldable as F
 
 import qualified Database.SQLite.Simple as SQL
 import qualified Database.SQLite.Simple.FromRow as SQL
@@ -60,6 +61,7 @@ import Control.Monad
 import Control.Monad.Catch
 import Data.Either
 import Data.Functor
+import Data.Monoid
 import GHC.Generics
 import System.IO (stdout)
 
@@ -118,17 +120,26 @@ data GoogleEnv = GoogleEnv
   , credentials :: (forall s . Google.Credentials s)
   }
 
-mkEnv :: (MonadCatch f, MonadIO f) =>
-  Google.Credentials '["https://www.googleapis.com/auth/calendar"]
-  -> Google.Logger
-  -> Conduit.Manager
-  -> f (Google.Env '["https://www.googleapis.com/auth/calendar"])
-mkEnv credentials lgr mgr = Google.newEnvWith credentials lgr mgr <&> (Google.envScopes .~ Calendar.calendarScope)
+data CalendarData = CalendarData
+  { calendarId :: Text
+  } deriving (Eq, Show, Generic)
+
+data GoogleStateException = NoEventCalendarException deriving (Show, Eq)
+
+instance Exception GoogleStateException
 
 runCalendar :: GoogleEnv -> Google.Google '["https://www.googleapis.com/auth/calendar"] b -> IO b
 runCalendar GoogleEnv{..} task = do
   env <- Google.newEnvWith credentials logger manager <&> (Google.envScopes .~ Calendar.calendarScope)
   Google.runResourceT . Google.runGoogle env $ task
+
+getCalendar :: Text -> Google.Google '["https://www.googleapis.com/auth/calendar"] CalendarData
+getCalendar name = do
+  out <- Google.send Calendar.calendarListList
+  let calendars = out ^.. Calendar.clItems . traverse
+      maybeCalendar = F.find (\v -> v ^. Calendar.cleSummary == Just name) calendars
+      maybeId = maybeCalendar >>= view Calendar.cleId
+  maybe (throwM NoEventCalendarException) (pure . CalendarData) maybeId
 
 main :: IO ()
 main = do
@@ -147,11 +158,15 @@ main = do
   lgr <- Google.newLogger Google.Debug stdout
   mgr <- liftIO $ newManager tlsManagerSettings
   let env = GoogleEnv mgr lgr credentials
+
+  calendarName <- Config.require config "google.calendar-name"
+
   when argsInit $ runCalendar env $ do
-    calendarName <- liftIO $ Config.require config "google.calendar-name"
     let newCalendar = Calendar.calendar & Calendar.calSummary .~ Just calendarName
         request = Calendar.calendarsInsert newCalendar
     Google.send request $> ()
+  calendar <- runCalendar env $ getCalendar calendarName
   out <- runCalendar env $ do
-    Google.send Calendar.calendarListList
-  mapM_ (TL.putStrLn . TL.toLazyText . Pretty.encodePrettyToTextBuilder) $ out ^. Calendar.clItems
+    Google.send $ Calendar.calendarsGet (calendarId calendar)
+  
+  print out
