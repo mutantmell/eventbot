@@ -66,6 +66,8 @@ executable eventbot-exe
     , aeson
     , aeson-pretty
     , exceptions
+    , time
+    , timezone-series
   other-modules:
       Paths_eventbot
   default-language: Haskell2010

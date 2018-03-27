@@ -65,6 +65,8 @@ import Data.Monoid
 import GHC.Generics
 import System.IO (stdout)
 
+import Data.Time
+
 data Args = Args
   { argsInit :: Bool
   } deriving (Eq, Show)
@@ -120,6 +122,17 @@ data GoogleEnv = GoogleEnv
   , credentials :: (forall s . Google.Credentials s)
   }
 
+mkGoogleEnv :: Config.Config -> IO GoogleEnv
+mkGoogleEnv config = do
+  clientId <- Google.ClientId <$> Config.require config "client-id"
+  clientSecret <- Google.Secret <$> Config.require config "client-secret"
+  refreshToken <- Google.RefreshToken <$> Config.require config "refresh-token"
+  let oauthClient = Google.OAuthClient clientId clientSecret
+      credentials = Google.FromUser $ Google.AuthorizedUser clientId refreshToken clientSecret
+  lgr <- Google.newLogger Google.Debug stdout
+  mgr <- newManager tlsManagerSettings
+  pure $ GoogleEnv mgr lgr credentials
+
 data CalendarData = CalendarData
   { calendarId :: Text
   } deriving (Eq, Show, Generic)
@@ -141,6 +154,26 @@ getCalendar name = do
       maybeId = maybeCalendar >>= view Calendar.cleId
   maybe (throwM NoEventCalendarException) (pure . CalendarData) maybeId
 
+insertTestEvent :: CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] Calendar.Event
+insertTestEvent calendar = do
+  --Google.send $ Calendar.calendarsGet (calendarId calendar)
+  timeZone <- liftIO $ zonedTimeZone <$> getZonedTime
+  let day = fromGregorian 2018 3 28
+      startTimeOfDay = TimeOfDay 17 0 0
+      startLocalTime = LocalTime day startTimeOfDay
+      startUtcTime = localTimeToUTC timeZone startLocalTime
+      endTimeOfDay = TimeOfDay 19 0 0
+      endLocalTime = LocalTime day endTimeOfDay
+      endUtcTime = localTimeToUTC timeZone endLocalTime
+      eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startUtcTime
+                                          & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
+      eventEnd = Calendar.eventDateTime & Calendar.edtDateTime .~ Just endUtcTime
+                                          & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
+      event = Calendar.event & Calendar.eSummary .~ Just "test event"
+                             & Calendar.eStart .~ Just eventStart
+                             & Calendar.eEnd .~ Just eventEnd
+  Google.send $ Calendar.eventsInsert (calendarId calendar) event
+
 main :: IO ()
 main = do
   Args{..} <- Opt.execParser arguments
@@ -150,14 +183,7 @@ main = do
     ]
   --botToken <- Config.require config "discord.bot-token"
   --D.runBot (D.Bot botToken) discord
-  clientId <- Google.ClientId <$> Config.require config "google.client-id"
-  clientSecret <- Google.Secret <$> Config.require config "google.client-secret"
-  refreshToken <- Google.RefreshToken <$> Config.require config "google.refresh-token"
-  let oauthClient = Google.OAuthClient clientId clientSecret
-      credentials = Google.FromUser $ Google.AuthorizedUser clientId refreshToken clientSecret
-  lgr <- Google.newLogger Google.Debug stdout
-  mgr <- liftIO $ newManager tlsManagerSettings
-  let env = GoogleEnv mgr lgr credentials
+  env <- mkGoogleEnv (Config.subconfig "google" config)
 
   calendarName <- Config.require config "google.calendar-name"
 
@@ -166,7 +192,5 @@ main = do
         request = Calendar.calendarsInsert newCalendar
     Google.send request $> ()
   calendar <- runCalendar env $ getCalendar calendarName
-  out <- runCalendar env $ do
-    Google.send $ Calendar.calendarsGet (calendarId calendar)
-  
+  out <- runCalendar env $ insertTestEvent calendar
   print out
