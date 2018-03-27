@@ -65,6 +65,7 @@ executable eventbot-exe
     , optparse-applicative
     , aeson
     , aeson-pretty
+    , exceptions
   other-modules:
       Paths_eventbot
   default-language: Haskell2010
