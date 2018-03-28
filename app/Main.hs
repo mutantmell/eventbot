@@ -33,39 +33,39 @@ import qualified Network.Google.Auth as Google
 import qualified Network.Google.AppsCalendar as Calendar
 import qualified Network.Google.Auth.ServiceAccount as ServiceAccount
 
+import qualified Data.Char as C
+import qualified Data.Foldable as F
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy.IO as TL
 import qualified Data.Text.Lazy.Builder as TL
-import qualified Data.Char as C
-import qualified Data.Foldable as F
+import           Data.Time (LocalTime(..), TimeOfDay(..), TimeZone)
+import qualified Data.Time as Time
 
 import qualified Database.SQLite.Simple as SQL
 import qualified Database.SQLite.Simple.FromRow as SQL
 
-import Network.HTTP.Conduit (Manager, newManager, tlsManagerSettings)
+import Network.HTTP.Conduit (Manager)
 import qualified Network.HTTP.Conduit as Conduit
 
 import qualified Options.Applicative as Opt
 
 import Data.String.Conversions
 
-import Control.Monad.IO.Class
-
-import Control.Lens
-
 import Control.Applicative
 import Control.Exception
+import Control.Lens
 import Control.Monad
 import Control.Monad.Catch
+import Control.Monad.IO.Class
 import Data.Either
 import Data.Functor
 import Data.Monoid
 import GHC.Generics
 import System.IO (stdout)
 
-import Data.Time
+import Eventbot.Google.Calendar
 
 data Args = Args
   { argsInit :: Bool
@@ -82,6 +82,29 @@ arguments = Opt.info (parser <**> Opt.helper) description
            (  Opt.long "init"
            <> Opt.help "Whether to initialize the bot for a first run"
            )
+
+
+mkGoogleEnv :: Config.Config -> IO GoogleEnv
+mkGoogleEnv config = do
+  clientId <- Google.ClientId <$> Config.require config "client-id"
+  clientSecret <- Google.Secret <$> Config.require config "client-secret"
+  refreshToken <- Google.RefreshToken <$> Config.require config "refresh-token"
+  let oauthClient = Google.OAuthClient clientId clientSecret
+      credentials = Google.FromUser $ Google.AuthorizedUser clientId refreshToken clientSecret
+  lgr <- Google.newLogger Google.Debug stdout
+  mgr <- Conduit.newManager Conduit.tlsManagerSettings
+  pure $ GoogleEnv mgr lgr credentials
+
+insertTestEvent :: CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] Calendar.Event
+insertTestEvent calendar = do
+  --Google.send $ Calendar.calendarsGet (calendarId calendar)
+  timeZone <- liftIO $ Time.zonedTimeZone <$> Time.getZonedTime
+  let day = Time.fromGregorian 2018 3 29
+      startTime = LocalTime day $ TimeOfDay 17 0 0
+      endTime = LocalTime day $ TimeOfDay 19 0 0
+      request = CalendarRequest "test event please ignore" startTime endTime
+      event = calendarRequestToGoogle request timeZone
+  Google.send $ Calendar.eventsInsert (calendarId calendar) event
 
 data Command = EventCommand EventSubCommand
   deriving (Eq, Show, Generic)
@@ -116,63 +139,7 @@ discord = do
       D.when ("!" `T.isPrefixOf` messageContent) $
         mapM_ (reply msg) ((convertString . show) <$> command messageContent)
 
-data GoogleEnv = GoogleEnv
-  { manager :: Conduit.Manager
-  , logger :: Google.Logger
-  , credentials :: (forall s . Google.Credentials s)
-  }
 
-mkGoogleEnv :: Config.Config -> IO GoogleEnv
-mkGoogleEnv config = do
-  clientId <- Google.ClientId <$> Config.require config "client-id"
-  clientSecret <- Google.Secret <$> Config.require config "client-secret"
-  refreshToken <- Google.RefreshToken <$> Config.require config "refresh-token"
-  let oauthClient = Google.OAuthClient clientId clientSecret
-      credentials = Google.FromUser $ Google.AuthorizedUser clientId refreshToken clientSecret
-  lgr <- Google.newLogger Google.Debug stdout
-  mgr <- newManager tlsManagerSettings
-  pure $ GoogleEnv mgr lgr credentials
-
-data CalendarData = CalendarData
-  { calendarId :: Text
-  } deriving (Eq, Show, Generic)
-
-data GoogleStateException = NoEventCalendarException deriving (Show, Eq)
-
-instance Exception GoogleStateException
-
-runCalendar :: GoogleEnv -> Google.Google '["https://www.googleapis.com/auth/calendar"] b -> IO b
-runCalendar GoogleEnv{..} task = do
-  env <- Google.newEnvWith credentials logger manager <&> (Google.envScopes .~ Calendar.calendarScope)
-  Google.runResourceT . Google.runGoogle env $ task
-
-getCalendar :: Text -> Google.Google '["https://www.googleapis.com/auth/calendar"] CalendarData
-getCalendar name = do
-  out <- Google.send Calendar.calendarListList
-  let calendars = out ^.. Calendar.clItems . traverse
-      maybeCalendar = F.find (\v -> v ^. Calendar.cleSummary == Just name) calendars
-      maybeId = maybeCalendar >>= view Calendar.cleId
-  maybe (throwM NoEventCalendarException) (pure . CalendarData) maybeId
-
-insertTestEvent :: CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] Calendar.Event
-insertTestEvent calendar = do
-  --Google.send $ Calendar.calendarsGet (calendarId calendar)
-  timeZone <- liftIO $ zonedTimeZone <$> getZonedTime
-  let day = fromGregorian 2018 3 28
-      startTimeOfDay = TimeOfDay 17 0 0
-      startLocalTime = LocalTime day startTimeOfDay
-      startUtcTime = localTimeToUTC timeZone startLocalTime
-      endTimeOfDay = TimeOfDay 19 0 0
-      endLocalTime = LocalTime day endTimeOfDay
-      endUtcTime = localTimeToUTC timeZone endLocalTime
-      eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startUtcTime
-                                          & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
-      eventEnd = Calendar.eventDateTime & Calendar.edtDateTime .~ Just endUtcTime
-                                          & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
-      event = Calendar.event & Calendar.eSummary .~ Just "test event"
-                             & Calendar.eStart .~ Just eventStart
-                             & Calendar.eEnd .~ Just eventEnd
-  Google.send $ Calendar.eventsInsert (calendarId calendar) event
 
 main :: IO ()
 main = do
@@ -191,6 +158,7 @@ main = do
     let newCalendar = Calendar.calendar & Calendar.calSummary .~ Just calendarName
         request = Calendar.calendarsInsert newCalendar
     Google.send request $> ()
-  calendar <- runCalendar env $ getCalendar calendarName
+  maybeCalendar <- runCalendar env $ getCalendar calendarName
+  calendar <- maybe (throwM NoEventCalendarException) pure maybeCalendar
   out <- runCalendar env $ insertTestEvent calendar
   print out
