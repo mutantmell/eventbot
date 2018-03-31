@@ -73,6 +73,7 @@ executable eventbot-exe
     , either
   other-modules:
         Eventbot.Commands
+      , Eventbot.Discord
       , Eventbot.Google.Calendar
       , Paths_eventbot
   default-language: Haskell2010

@@ -11,7 +11,7 @@ module Eventbot.Commands
 , parseCommand'
 
 ) where
-   
+
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time (Day, LocalTime(..), TimeOfDay(..), TimeZone)

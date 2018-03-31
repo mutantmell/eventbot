@@ -22,7 +22,6 @@ import qualified Network.HTTP.Client as Http
 import qualified Network.HTTP.Client.TLS as Http
 import qualified Data.ByteString as BS
 import qualified URI.ByteString as Uri
-import qualified Pipes as P
 import qualified Network.Discord as D
 
 import qualified Data.Aeson as Json
@@ -67,6 +66,7 @@ import System.IO (stdout)
 
 import Eventbot.Google.Calendar
 import Eventbot.Commands
+import Eventbot.Discord
 
 data Args = Args
   { argsInit :: Bool
@@ -105,21 +105,6 @@ insertTestEvent calendar = do
       request = CalendarRequest "test event please ignore" startTime endTime
       event = calendarRequestToGoogle request timeZone
   Google.send $ Calendar.eventsInsert (calendarId calendar) event
-
-reply :: D.Message -> Text -> P.Effect D.DiscordM ()
-reply D.Message{D.messageChannel=chan} cont = D.fetch' $ D.CreateMessage chan cont Nothing
-
-discord :: D.DiscordBot D.BotClient ()
-discord = do
-  D.with D.ReadyEvent $ \(D.Init v u _ _ _) ->
-    D.liftIO $ putStrLn $ "Connected to gateway v" ++ show v ++ " as user " ++ show u
-
-  D.with D.MessageCreateEvent $ \msg@D.Message{..} -> do 
-    D.when (not $ D.userIsBot messageAuthor) $ do
-      D.when ("Ping" `T.isPrefixOf` messageContent) $
-        reply msg "Pong!"
-      D.when ("!" `T.isPrefixOf` messageContent) $
-        mapM_ (reply msg) ((convertString . show) <$> parseCommand messageContent)
 
 main :: IO ()
 main = do
