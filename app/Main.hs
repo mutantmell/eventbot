@@ -66,6 +66,7 @@ import GHC.Generics
 import System.IO (stdout)
 
 import Eventbot.Google.Calendar
+import Eventbot.Commands
 
 data Args = Args
   { argsInit :: Bool
@@ -82,7 +83,6 @@ arguments = Opt.info (parser <**> Opt.helper) description
            (  Opt.long "init"
            <> Opt.help "Whether to initialize the bot for a first run"
            )
-
 
 mkGoogleEnv :: Config.Config -> IO GoogleEnv
 mkGoogleEnv config = do
@@ -106,24 +106,6 @@ insertTestEvent calendar = do
       event = calendarRequestToGoogle request timeZone
   Google.send $ Calendar.eventsInsert (calendarId calendar) event
 
-data Command = EventCommand EventSubCommand
-  deriving (Eq, Show, Generic)
-
-data EventSubCommand = GetEvents 
-                     | CreateEvent
-  deriving (Eq, Show, Generic)
-
-command :: Text -> Maybe Command
-command str = case arguments of
-  ("!event":rest) -> EventCommand <$> eventSubCommand rest
-  _               -> Nothing
-  where
-    arguments = T.split C.isSpace str
-    eventSubCommand :: [Text] -> Maybe EventSubCommand
-    eventSubCommand ("all":[])    = Just GetEvents
-    eventSubCommand ("create":_) = Just CreateEvent
-    eventSubCommand _            = Nothing
-
 reply :: D.Message -> Text -> P.Effect D.DiscordM ()
 reply D.Message{D.messageChannel=chan} cont = D.fetch' $ D.CreateMessage chan cont Nothing
 
@@ -137,9 +119,7 @@ discord = do
       D.when ("Ping" `T.isPrefixOf` messageContent) $
         reply msg "Pong!"
       D.when ("!" `T.isPrefixOf` messageContent) $
-        mapM_ (reply msg) ((convertString . show) <$> command messageContent)
-
-
+        mapM_ (reply msg) ((convertString . show) <$> parseCommand messageContent)
 
 main :: IO ()
 main = do
@@ -148,17 +128,19 @@ main = do
     ("discord.", Config.Required $ "." </> "conf" </> "discord.conf"),
     ("google.", Config.Required $ "." </> "conf" </> "google.conf")
     ]
-  --botToken <- Config.require config "discord.bot-token"
-  --D.runBot (D.Bot botToken) discord
-  env <- mkGoogleEnv (Config.subconfig "google" config)
 
+  env <- mkGoogleEnv (Config.subconfig "google" config)
   calendarName <- Config.require config "google.calendar-name"
 
   when argsInit $ runCalendar env $ do
     let newCalendar = Calendar.calendar & Calendar.calSummary .~ Just calendarName
         request = Calendar.calendarsInsert newCalendar
     Google.send request $> ()
+
   maybeCalendar <- runCalendar env $ getCalendar calendarName
   calendar <- maybe (throwM NoEventCalendarException) pure maybeCalendar
-  out <- runCalendar env $ insertTestEvent calendar
-  print out
+
+  botToken <- Config.require config "discord.bot-token"
+  D.runBot (D.Bot botToken) discord
+
+  pure ()

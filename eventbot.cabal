@@ -43,8 +43,9 @@ executable eventbot-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
-    , lens
     , eventbot
+    , lens
+    , generic-lens
     , discord-hs
     , gogol
     , gogol-apps-calendar
@@ -68,8 +69,12 @@ executable eventbot-exe
     , exceptions
     , time
     , timezone-series
+    , attoparsec
+    , either
   other-modules:
-      Paths_eventbot
+        Eventbot.Commands
+      , Eventbot.Google.Calendar
+      , Paths_eventbot
   default-language: Haskell2010
 
 test-suite eventbot-test
