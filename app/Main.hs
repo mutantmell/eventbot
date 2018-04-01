@@ -66,6 +66,7 @@ import System.IO (stdout)
 
 import Eventbot.Google.Calendar
 import Eventbot.Commands
+import Eventbot.Commands.Optics
 import Eventbot.Discord
 
 data Args = Args
@@ -95,16 +96,15 @@ mkGoogleEnv config = do
   mgr <- Conduit.newManager Conduit.tlsManagerSettings
   pure $ GoogleEnv mgr lgr credentials
 
-insertTestEvent :: CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] Calendar.Event
-insertTestEvent calendar = do
-  --Google.send $ Calendar.calendarsGet (calendarId calendar)
-  timeZone <- liftIO $ Time.zonedTimeZone <$> Time.getZonedTime
-  let day = Time.fromGregorian 2018 3 29
-      startTime = LocalTime day $ TimeOfDay 17 0 0
-      endTime = LocalTime day $ TimeOfDay 19 0 0
-      request = CalendarRequest "test event please ignore" startTime endTime
-      event = calendarRequestToGoogle request timeZone
-  Google.send $ Calendar.eventsInsert (calendarId calendar) event
+insertTestEvent :: TimeZone -> CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] Calendar.Event
+insertTestEvent timeZone calendar = Google.send $ Calendar.eventsInsert (calendarId calendar) event
+  where
+    tIso = utcLocalIso timeZone
+    day = Time.fromGregorian 2018 4 2
+    startTime = LocalTime day (TimeOfDay 17 0 0) ^. tIso
+    endTime = LocalTime day (TimeOfDay 19 0 0) ^. tIso
+    request = CalendarRequest "test event please ignore" startTime endTime
+    event = calendarRequestToGoogle request
 
 main :: IO ()
 main = do
@@ -113,6 +113,8 @@ main = do
     ("discord.", Config.Required $ "." </> "conf" </> "discord.conf"),
     ("google.", Config.Required $ "." </> "conf" </> "google.conf")
     ]
+
+  timeZone <- Time.zonedTimeZone <$> Time.getZonedTime
 
   env <- mkGoogleEnv (Config.subconfig "google" config)
   calendarName <- Config.require config "google.calendar-name"
@@ -124,8 +126,9 @@ main = do
 
   maybeCalendar <- runCalendar env $ getCalendar calendarName
   calendar <- maybe (throwM NoEventCalendarException) pure maybeCalendar
+--  _ <- runCalendar env $ insertTestEvent timeZone calendar
 
   botToken <- Config.require config "discord.bot-token"
-  D.runBot (D.Bot botToken) discord
+  D.runBot (D.Bot botToken) $ discord timeZone env calendar
 
   pure ()

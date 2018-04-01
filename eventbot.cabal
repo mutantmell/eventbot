@@ -73,6 +73,7 @@ executable eventbot-exe
     , either
   other-modules:
         Eventbot.Commands
+      , Eventbot.Commands.Optics
       , Eventbot.Discord
       , Eventbot.Google.Calendar
       , Paths_eventbot

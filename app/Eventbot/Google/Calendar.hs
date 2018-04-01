@@ -17,7 +17,7 @@ import qualified Network.HTTP.Conduit as Conduit
 import qualified Data.Foldable as F
 import           Data.Text (Text)
 import qualified Data.Text as T
-import           Data.Time (LocalTime, TimeOfDay, TimeZone)
+import           Data.Time (LocalTime, TimeOfDay, TimeZone, UTCTime)
 import qualified Data.Time as Time
 
 import Control.Exception
@@ -56,18 +56,16 @@ getCalendar name = do
 
 data CalendarRequest = CalendarRequest
   { eventName :: Text
-  , startTime :: LocalTime
-  , endTime :: LocalTime
+  , startTime :: UTCTime
+  , endTime :: UTCTime
   } deriving (Eq, Show, Generic)
 
-calendarRequestToGoogle :: CalendarRequest -> TimeZone -> Calendar.Event
-calendarRequestToGoogle CalendarRequest{..} timeZone = event
+calendarRequestToGoogle :: CalendarRequest -> Calendar.Event
+calendarRequestToGoogle CalendarRequest{..} = event
   where
-    startTimeUtc = Time.localTimeToUTC timeZone startTime
-    endTimeUtc = Time.localTimeToUTC timeZone endTime
-    eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startTimeUtc
+    eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startTime
                                         & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
-    eventEnd = Calendar.eventDateTime & Calendar.edtDateTime .~ Just endTimeUtc
+    eventEnd = Calendar.eventDateTime & Calendar.edtDateTime .~ Just endTime
                                       & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
     event = Calendar.event & Calendar.eSummary .~ Just eventName
                            & Calendar.eStart .~ Just eventStart
