@@ -60,8 +60,8 @@ data CalendarRequest = CalendarRequest
   , endTime :: UTCTime
   } deriving (Eq, Show, Generic)
 
-calendarRequestToGoogle :: CalendarRequest -> Calendar.Event
-calendarRequestToGoogle CalendarRequest{..} = event
+calendarRequestToGoogle :: CalendarData -> CalendarRequest -> Google.Google '["https://www.googleapis.com/auth/calendar"] (Calendar.Event)
+calendarRequestToGoogle CalendarData{..} CalendarRequest{..} = Google.send $ Calendar.eventsInsert calendarId event
   where
     eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startTime
                                         & Calendar.edtTimeZone .~ Just "America/Los_Angeles"

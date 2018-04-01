@@ -18,9 +18,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Monoid
 
-import qualified Network.Google as Google
-import qualified Network.Google.AppsCalendar as Calendar
-
 import Eventbot.Commands
 import Eventbot.Commands.Optics
 import Eventbot.Google.Calendar
@@ -45,10 +42,9 @@ discord timeZone googleEnv calendar = do
             reply msg "getting calendar link..."
             pure ()
           (EventCommand (CreateEvent eventData)) -> do
-            -- TODO: don't use gogol in non-google modules
             let calendarRequest = eventData ^. createEventIso timeZone
-                insert = Google.send $ Calendar.eventsInsert (calendarId calendar) (calendarRequestToGoogle calendarRequest)
-            liftIO $ runCalendar googleEnv insert
+                insertRequest = calendarRequestToGoogle calendar calendarRequest
+            liftIO $ runCalendar googleEnv insertRequest
             reply msg $ "created event " <> Eventbot.Commands.eventName eventData
             pure ()
           (EventCommand InvalidEventCommand) -> do

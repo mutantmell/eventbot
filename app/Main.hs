@@ -96,16 +96,6 @@ mkGoogleEnv config = do
   mgr <- Conduit.newManager Conduit.tlsManagerSettings
   pure $ GoogleEnv mgr lgr credentials
 
-insertTestEvent :: TimeZone -> CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] Calendar.Event
-insertTestEvent timeZone calendar = Google.send $ Calendar.eventsInsert (calendarId calendar) event
-  where
-    tIso = utcLocalIso timeZone
-    day = Time.fromGregorian 2018 4 2
-    startTime = LocalTime day (TimeOfDay 17 0 0) ^. tIso
-    endTime = LocalTime day (TimeOfDay 19 0 0) ^. tIso
-    request = CalendarRequest "test event please ignore" startTime endTime
-    event = calendarRequestToGoogle request
-
 main :: IO ()
 main = do
   Args{..} <- Opt.execParser arguments
