@@ -32,6 +32,7 @@ data Command = EventCommand EventSubCommand
   deriving (Eq, Show, Generic)
 
 data EventSubCommand = GetEvents
+                     | GetCalendar
                      | CreateEvent CreateEventData
                      | InvalidEventCommand
   deriving (Eq, Show, Generic)
@@ -61,6 +62,9 @@ eventCommandParser = do
 
 getEventsParser :: P.Parser EventSubCommand
 getEventsParser = P.string "all" $> GetEvents
+
+getCalendarParser :: P.Parser EventSubCommand
+getCalendarParser = P.string "calendar" $> GetCalendar
 
 createEventParser :: P.Parser EventSubCommand
 createEventParser = do

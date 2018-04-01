@@ -41,6 +41,9 @@ discord timeZone googleEnv calendar = do
           (EventCommand GetEvents) -> do
             reply msg "getting events..."
             pure ()
+          (EventCommand GetCalendar) -> do
+            reply msg "getting calendar link..."
+            pure ()
           (EventCommand (CreateEvent eventData)) -> do
             -- TODO: don't use gogol in non-google modules
             let calendarRequest = eventData ^. createEventIso timeZone
