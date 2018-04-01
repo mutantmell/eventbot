@@ -17,7 +17,7 @@ import qualified Network.HTTP.Conduit as Conduit
 import qualified Data.Foldable as F
 import           Data.Text (Text)
 import qualified Data.Text as T
-import           Data.Time (LocalTime, TimeOfDay, TimeZone, UTCTime)
+import           Data.Time (UTCTime)
 import qualified Data.Time as Time
 
 import Control.Exception
@@ -61,12 +61,18 @@ data CalendarRequest = CalendarRequest
   } deriving (Eq, Show, Generic)
 
 calendarRequestToGoogle :: CalendarData -> CalendarRequest -> Google.Google '["https://www.googleapis.com/auth/calendar"] (Calendar.Event)
-calendarRequestToGoogle CalendarData{..} CalendarRequest{..} = Google.send $ Calendar.eventsInsert calendarId event
+calendarRequestToGoogle CalendarData{..} CalendarRequest{..} = Google.send request
   where
+    request = Calendar.eventsInsert calendarId event
+    event = Calendar.event & Calendar.eSummary .~ Just eventName
+                           & Calendar.eStart .~ Just eventStart
+                           & Calendar.eEnd .~ Just eventEnd
     eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startTime
                                         & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
     eventEnd = Calendar.eventDateTime & Calendar.edtDateTime .~ Just endTime
                                       & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
-    event = Calendar.event & Calendar.eSummary .~ Just eventName
-                           & Calendar.eStart .~ Just eventStart
-                           & Calendar.eEnd .~ Just eventEnd
+
+getEventsFromDateGoogle :: UTCTime -> CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] (Calendar.Events)
+getEventsFromDateGoogle fromTime CalendarData{..} = Google.send request
+  where
+    request = Calendar.eventsList calendarId & Calendar.elTimeMin .~ Just fromTime

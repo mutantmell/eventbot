@@ -92,7 +92,7 @@ mkGoogleEnv config = do
   refreshToken <- Google.RefreshToken <$> Config.require config "refresh-token"
   let oauthClient = Google.OAuthClient clientId clientSecret
       credentials = Google.FromUser $ Google.AuthorizedUser clientId refreshToken clientSecret
-  lgr <- Google.newLogger Google.Debug stdout
+  lgr <- Google.newLogger Google.Error stdout
   mgr <- Conduit.newManager Conduit.tlsManagerSettings
   pure $ GoogleEnv mgr lgr credentials
 
@@ -117,8 +117,22 @@ main = do
   maybeCalendar <- runCalendar env $ getCalendar calendarName
   calendar <- maybe (throwM NoEventCalendarException) pure maybeCalendar
 --  _ <- runCalendar env $ insertTestEvent timeZone calendar
+  today <- (Time.localDay . Time.zonedTimeToLocalTime) <$> Time.getZonedTime
+  let startOfToday = LocalTime today Time.midnight
+      startOfTodayUtc = Time.localTimeToUTC timeZone startOfToday
 
-  botToken <- Config.require config "discord.bot-token"
-  D.runBot (D.Bot botToken) $ discord timeZone env calendar
+  fromTodayEvents <- runCalendar env (getEventsFromDateGoogle startOfTodayUtc calendar)
+  mapM_ print $ fromTodayEvents ^.. Calendar.eveItems . traverse . Calendar.eSummary
+
+  let startOfTomorrowUtc = Time.addUTCTime Time.nominalDay startOfTodayUtc
+  fromTomorrowEvents <- runCalendar env (getEventsFromDateGoogle startOfTomorrowUtc calendar)
+  mapM_ print $ fromTomorrowEvents ^.. Calendar.eveItems . traverse . Calendar.eSummary
+
+  let startOfDayAfterUtc = Time.addUTCTime Time.nominalDay startOfTomorrowUtc
+  fromTomorrowEvents <- runCalendar env (getEventsFromDateGoogle startOfDayAfterUtc calendar)
+  mapM_ print $ fromTomorrowEvents ^.. Calendar.eveItems . traverse . Calendar.eSummary
+
+  --botToken <- Config.require config "discord.bot-token"
+  --D.runBot (D.Bot botToken) $ discord timeZone env calendar
 
   pure ()
