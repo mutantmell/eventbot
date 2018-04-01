@@ -116,23 +116,8 @@ main = do
 
   maybeCalendar <- runCalendar env $ getCalendar calendarName
   calendar <- maybe (throwM NoEventCalendarException) pure maybeCalendar
---  _ <- runCalendar env $ insertTestEvent timeZone calendar
-  today <- (Time.localDay . Time.zonedTimeToLocalTime) <$> Time.getZonedTime
-  let startOfToday = LocalTime today Time.midnight
-      startOfTodayUtc = Time.localTimeToUTC timeZone startOfToday
 
-  fromTodayEvents <- runCalendar env (getEventsFromDateGoogle startOfTodayUtc calendar)
-  mapM_ print $ fromTodayEvents ^.. Calendar.eveItems . traverse . Calendar.eSummary
-
-  let startOfTomorrowUtc = Time.addUTCTime Time.nominalDay startOfTodayUtc
-  fromTomorrowEvents <- runCalendar env (getEventsFromDateGoogle startOfTomorrowUtc calendar)
-  mapM_ print $ fromTomorrowEvents ^.. Calendar.eveItems . traverse . Calendar.eSummary
-
-  let startOfDayAfterUtc = Time.addUTCTime Time.nominalDay startOfTomorrowUtc
-  fromTomorrowEvents <- runCalendar env (getEventsFromDateGoogle startOfDayAfterUtc calendar)
-  mapM_ print $ fromTomorrowEvents ^.. Calendar.eveItems . traverse . Calendar.eSummary
-
-  --botToken <- Config.require config "discord.bot-token"
-  --D.runBot (D.Bot botToken) $ discord timeZone env calendar
+  botToken <- Config.require config "discord.bot-token"
+  D.runBot (D.Bot botToken) $ discord timeZone env calendar
 
   pure ()

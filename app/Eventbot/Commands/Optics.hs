@@ -17,8 +17,8 @@ createEventIso :: TimeZone -> Iso' CreateEventData G.CalendarRequest
 createEventIso tz = L.iso to from
   where
     tIso = utcLocalIso tz
-    to CreateEventData{..} = G.CalendarRequest eventName (startTime ^. tIso) (endTime ^. tIso)
-    from G.CalendarRequest{..} = CreateEventData eventName (startTime ^. L.from tIso) (endTime ^. L.from tIso)
+    to CreateEventData{..} = G.CalendarRequest eventName maybeLocation (startTime ^. tIso) (endTime ^. tIso)
+    from G.CalendarRequest{..} = CreateEventData eventName maybeLocation (startTime ^. L.from tIso) (endTime ^. L.from tIso)
 
 utcLocalIso :: TimeZone -> Iso' LocalTime UTCTime
 utcLocalIso tz = L.iso to from

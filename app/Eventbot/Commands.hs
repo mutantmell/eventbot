@@ -5,6 +5,8 @@
 module Eventbot.Commands
 ( Command(..)
 , EventSubCommand(..)
+
+, GetEventsData(..)
 , CreateEventData(..)
 
 , parseCommand
@@ -31,14 +33,19 @@ import GHC.Generics
 data Command = EventCommand EventSubCommand
   deriving (Eq, Show, Generic)
 
-data EventSubCommand = GetEvents
+data EventSubCommand = GetEvents GetEventsData
                      | GetCalendar
                      | CreateEvent CreateEventData
                      | InvalidEventCommand
   deriving (Eq, Show, Generic)
 
+data GetEventsData = GetEventsData
+  { maybeFromDay :: Maybe Day
+  } deriving (Eq, Show, Generic)
+
 data CreateEventData = CreateEventData
   { eventName :: Text
+  , maybeLocation :: Maybe Text
   , startTime :: LocalTime
   , endTime :: LocalTime
   } deriving (Eq, Show, Generic)
@@ -61,7 +68,10 @@ eventCommandParser = do
   getEventsParser <|> createEventParser <|> invalidEventParser
 
 getEventsParser :: P.Parser EventSubCommand
-getEventsParser = P.string "all" $> GetEvents
+getEventsParser = do
+    P.string "all" <|> P.string "list"
+    P.skipSpace
+    GetEvents <$> getEventsDataParser
 
 getCalendarParser :: P.Parser EventSubCommand
 getCalendarParser = P.string "calendar" $> GetCalendar
@@ -72,12 +82,20 @@ createEventParser = do
   P.skipSpace
   CreateEvent <$> createEventDataParser
 
+getEventsDataParser :: P.Parser GetEventsData
+getEventsDataParser = do
+  maybeDay <- optional dayParser
+  pure $ GetEventsData maybeDay
+
 createEventDataParser :: P.Parser CreateEventData
 createEventDataParser = shortFormEventData <|> longFormEventData
 
 shortFormEventData :: P.Parser CreateEventData
 shortFormEventData = do
   name <- nameParser
+  P.skipSpace
+  maybeLocation <- P.asciiCI "none" $> Nothing
+               <|> Just <$> nameParser
   P.skipSpace
   day <- dayParser
   P.skipSpace
@@ -86,16 +104,19 @@ shortFormEventData = do
   endTimeOfDay <- timeOfDayParser
   let startTime = LocalTime day startTimeOfDay
       endTime = LocalTime day endTimeOfDay
-  pure $ CreateEventData name startTime endTime
+  pure $ CreateEventData name maybeLocation startTime endTime
 
 longFormEventData :: P.Parser CreateEventData
 longFormEventData = do
   name <- nameParser
   P.skipSpace
+  maybeLocation <- P.asciiCI "none" $> Nothing
+               <|> Just <$> nameParser
+  P.skipSpace
   startTime <- localTimeParser
   P.skipSpace
   endTime <- localTimeParser
-  pure $ CreateEventData name startTime endTime
+  pure $ CreateEventData name maybeLocation startTime endTime
 
 localTimeParser :: P.Parser LocalTime
 localTimeParser = parser <?> "localTimeParser"

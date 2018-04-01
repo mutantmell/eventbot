@@ -24,6 +24,7 @@ import Control.Exception
 import Control.Lens
 import Control.Monad.Catch
 import Control.Monad.IO.Class
+import Data.Maybe
 
 import GHC.Generics
 
@@ -33,8 +34,22 @@ data GoogleEnv = GoogleEnv
   , credentials :: (forall s . Google.Credentials s)
   }
 
+data CalendarRequest = CalendarRequest
+  { eventName :: Text
+  , maybeLocation :: Maybe Text
+  , startTime :: UTCTime
+  , endTime :: UTCTime
+  } deriving (Eq, Show, Generic)
+
 data CalendarData = CalendarData
   { calendarId :: Text
+  } deriving (Eq, Show, Generic)
+
+data CalendarEvent = CalendarEvent
+  { name :: Text
+  , maybeLocation :: Maybe Text
+  , startTime :: UTCTime
+  , endTime :: UTCTime
   } deriving (Eq, Show, Generic)
 
 data GoogleStateException = NoEventCalendarException deriving (Show, Eq)
@@ -54,12 +69,6 @@ getCalendar name = do
       maybeId = maybeCalendar >>= view Calendar.cleId
   pure $ CalendarData <$> maybeId
 
-data CalendarRequest = CalendarRequest
-  { eventName :: Text
-  , startTime :: UTCTime
-  , endTime :: UTCTime
-  } deriving (Eq, Show, Generic)
-
 calendarRequestToGoogle :: CalendarData -> CalendarRequest -> Google.Google '["https://www.googleapis.com/auth/calendar"] (Calendar.Event)
 calendarRequestToGoogle CalendarData{..} CalendarRequest{..} = Google.send request
   where
@@ -67,12 +76,24 @@ calendarRequestToGoogle CalendarData{..} CalendarRequest{..} = Google.send reque
     event = Calendar.event & Calendar.eSummary .~ Just eventName
                            & Calendar.eStart .~ Just eventStart
                            & Calendar.eEnd .~ Just eventEnd
+                           & Calendar.eLocation .~ maybeLocation
     eventStart = Calendar.eventDateTime & Calendar.edtDateTime .~ Just startTime
                                         & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
     eventEnd = Calendar.eventDateTime & Calendar.edtDateTime .~ Just endTime
                                       & Calendar.edtTimeZone .~ Just "America/Los_Angeles"
 
-getEventsFromDateGoogle :: UTCTime -> CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] (Calendar.Events)
-getEventsFromDateGoogle fromTime CalendarData{..} = Google.send request
+getEventsFromDateGoogle :: UTCTime -> CalendarData -> Google.Google '["https://www.googleapis.com/auth/calendar"] [CalendarEvent]
+getEventsFromDateGoogle fromTime CalendarData{..} = do
+  response <- Google.send request
+  let events = response ^. Calendar.eveItems
+  pure $ mapMaybe mkEvent events
   where
     request = Calendar.eventsList calendarId & Calendar.elTimeMin .~ Just fromTime
+    mkEvent :: Calendar.Event -> Maybe CalendarEvent
+    mkEvent event = do
+      let name = fromMaybe "<no name>" $ event ^. Calendar.eSummary
+          location = event ^. Calendar.eLocation
+      startTime <- event ^? Calendar.eStart . _Just . Calendar.edtDateTime . _Just
+      endTime <- event ^? Calendar.eEnd . _Just . Calendar.edtDateTime . _Just
+      pure $ CalendarEvent name location startTime endTime
+
