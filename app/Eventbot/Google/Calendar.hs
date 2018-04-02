@@ -46,7 +46,7 @@ data CalendarData = CalendarData
   } deriving (Eq, Show, Generic)
 
 data CalendarEvent = CalendarEvent
-  { name :: Text
+  { eventName :: Text
   , maybeLocation :: Maybe Text
   , startTime :: UTCTime
   , endTime :: UTCTime

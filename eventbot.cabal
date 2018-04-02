@@ -51,6 +51,7 @@ executable eventbot-exe
     , gogol-apps-calendar
     , sqlite-simple
     , text
+    , formatting
     , websockets
     , hoauth2
     , configurator

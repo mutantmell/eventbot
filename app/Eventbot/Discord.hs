@@ -24,11 +24,12 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Monoid
+import Formatting
+import Formatting.Time
 
 import Eventbot.Commands
 import Eventbot.Commands.Optics
 import Eventbot.Google.Calendar
-
 
 discord :: TimeZone -> GoogleEnv -> CalendarData -> D.DiscordBot D.BotClient ()
 discord timeZone googleEnv calendar = do
@@ -71,14 +72,19 @@ startOfToday timeZone = liftIO $ do
   pure $ Time.localTimeToUTC timeZone startOfToday
 
 startOfDay :: TimeZone -> Day -> UTCTime
-startOfDay timeZone day = Time.localTimeToUTC timeZone startOfDay
+startOfDay timeZone day = Time.localTimeToUTC timeZone startOfDay'
   where
-    startOfDay = Time.LocalTime day Time.midnight
+    startOfDay' = Time.LocalTime day Time.midnight
 
--- TODO: actually format
 formatEvent :: TimeZone -> CalendarEvent -> Text
-formatEvent tz = convertString . show
-
--- TODO: actually format
-formatTime :: TimeZone -> UTCTime -> Text
-formatTime tz = convertString . show
+formatEvent tz CalendarEvent{..} = template eventName maybeLocation
+  where
+    time start end = if Time.localDay start == Time.localDay end
+      then sformat ("from " % dateSlash % " " % hm % " " % dayHalfU % " until " % hm % " " % dayHalfU) start start start end end
+      else sformat ("from " % dateSlash % " " % hm % " " % dayHalfU % " until " % dateSlash % " " % hm % " " % dayHalfU) start start start end end end
+    time _ _ = "foo"
+    timeStr = time (Time.utcToLocalTime tz startTime) (Time.utcToLocalTime tz endTime)
+    noLocTemplate = "Event: " % stext % "\ndate: " % stext
+    withLocTemplate = "Event: " % stext % "\nat: " % stext % "\ndate: " % stext
+    template name' Nothing = sformat noLocTemplate name' timeStr
+    template name' (Just loc) = sformat withLocTemplate name' loc timeStr
