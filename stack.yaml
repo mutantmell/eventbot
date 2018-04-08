@@ -76,3 +76,7 @@ extra-deps: [
 flags:
   discord-hs:
     disable-docs: True
+
+# Don't enable nix here, else it'll fail on Windows
+nix:
+  shell-file: shell.nix
