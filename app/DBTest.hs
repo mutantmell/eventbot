@@ -10,9 +10,10 @@ instance SQL.FromRow TestField where
 main :: IO ()
 main = do
     conn <- SQL.open "test.db"
-    SQL.execute_ conn "CREATE TABLE test (id INTEGER PRIMARY KEY, str TEXT)"
-    SQL.execute conn "INSERT INTO test (str) VALUES (?)"
-      (SQL.Only ("test string 2" :: String))
-    r <- SQL.query_ conn "SELECT * from test" :: IO [TestField]
-    mapM_ print r
+    SQL.execute_ conn "CREATE TABLE servers (id INTEGER PRIMARY KEY, server_id TEXT, channel_id TEXT)"
+    SQL.execute_ conn "CREATE TABLE messages (id INTEGER PRIMARY KEY, message_id TEXT, message TEXT)"
+    -- SQL.execute conn "INSERT INTO test (str) VALUES (?)"
+    --   (SQL.Only ("test string 2" :: String))
+    -- r <- SQL.query_ conn "SELECT * from test" :: IO [TestField]
+    -- mapM_ print r
     SQL.close conn

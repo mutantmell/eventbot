@@ -96,4 +96,3 @@ getEventsFromDateGoogle fromTime CalendarData{..} = do
       startTime <- event ^? Calendar.eStart . _Just . Calendar.edtDateTime . _Just
       endTime <- event ^? Calendar.eEnd . _Just . Calendar.edtDateTime . _Just
       pure $ CalendarEvent name location startTime endTime
-

@@ -67,6 +67,7 @@ import System.IO (stdout)
 import Eventbot.Google.Calendar
 import Eventbot.Commands
 import Eventbot.Commands.Optics
+import Eventbot.Database
 import Eventbot.Discord
 
 data Args = Args
@@ -103,6 +104,8 @@ main = do
     ("discord.", Config.Required $ "." </> "conf" </> "discord.conf"),
     ("google.", Config.Required $ "." </> "conf" </> "google.conf")
     ]
+  mkServer "events.db"
+  let db = mkDatabaseFor "events.db"
 
   timeZone <- Time.zonedTimeZone <$> Time.getZonedTime
 
@@ -118,6 +121,6 @@ main = do
   calendar <- maybe (throwM NoEventCalendarException) pure maybeCalendar
 
   botToken <- Config.require config "discord.bot-token"
-  D.runBot (D.Bot botToken) $ discord timeZone env calendar
+  D.runBot (D.Bot botToken) $ discord timeZone env calendar db
 
   pure ()
