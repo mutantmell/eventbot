@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Eventbot.Database where
 
@@ -10,16 +11,17 @@ import qualified Database.SQLite.Simple as SQL
 import qualified Database.SQLite.Simple.FromRow as SQL
 
 import           Control.Applicative
+import           Control.Monad.IO.Class
 import           Data.Int
 import           Data.Maybe
 import           GHC.Generics
 
 data EventDatabase = EventDatabase
-  { serverQuery :: Int64 -> IO (Maybe ServerRow)
-  , insertServerQuery :: Int64 -> Int64 -> IO Int64
-  , messagesQuery :: Int64 -> IO [MessageRow]
-  , insertMessageQuery :: Int64 -> Int64 -> T.Text -> IO Int64
-  , deleteMessageQuery :: Int64 -> IO ()
+  { serverQuery :: (forall m . MonadIO m => Int64 -> m (Maybe ServerRow))
+  , insertServerQuery :: (forall m . MonadIO m => Int64 -> Int64 -> m Int64)
+  , messagesQuery :: (forall m . MonadIO m => Int64 -> m [MessageRow])
+  , insertMessageQuery :: (forall m . MonadIO m => Int64 -> Int64 -> T.Text -> m Int64)
+  , deleteMessageQuery :: (forall m . MonadIO m => Int64 -> m ())
   }
 
 data ServerRow = ServerRow
@@ -78,9 +80,9 @@ mkServer db = SQL.withConnection db $ \conn -> do
 
 mkDatabaseFor :: String -> EventDatabase
 mkDatabaseFor db = EventDatabase 
-  { serverQuery = rowForServer db
-  , insertServerQuery = insertServer db
-  , messagesQuery = messagesForServer db
-  , insertMessageQuery = insertMessage db
-  , deleteMessageQuery = deleteMessage db
+  { serverQuery = \s -> liftIO $ rowForServer db s
+  , insertServerQuery = \s c -> liftIO $ insertServer db s c
+  , messagesQuery = \s -> liftIO $ messagesForServer db s
+  , insertMessageQuery = \s m msg -> liftIO $ insertMessage db s m msg
+  , deleteMessageQuery = \m -> liftIO $ deleteMessage db m
   }

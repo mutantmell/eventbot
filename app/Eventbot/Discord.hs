@@ -62,26 +62,22 @@ maybeTextChannelName other = Nothing
 snowflakeToInt :: D.Snowflake -> Int64
 snowflakeToInt (D.Snowflake int) = fromIntegral int
 
+intToSnowflake :: Int64 -> D.Snowflake
+intToSnowflake int = D.Snowflake $ fromIntegral int
+
 discord :: TimeZone -> GoogleEnv -> CalendarData -> EventDatabase -> D.DiscordBot D.BotClient ()
 discord timeZone googleEnv calendar database = do
   D.with D.ReadyEvent $ \msg@(D.Init v u _ guilds _) -> do
     F.for_ guilds $ \guild -> do
       let gid = D.guildId guild
-      (liftIO $ (serverQuery database) (snowflakeToInt gid)) >>= \case
-        Just _ -> pure ()
-        Nothing -> do
-          (D.SyncFetched !channelsRaw) <- D.fetch $ DR.GetGuildChannels gid
-          let !channels = (unsafeCoerce channelsRaw :: [D.Channel])
-          let maybeChannel = F.find (\(_, name) -> name == "events") (mapMaybe maybeTextChannelName channels)
-          channelId <- case maybeChannel of
-            Just (channelId, _) -> pure channelId
-            Nothing -> do
-              let newChan = Json.Object $ fromList [ ("name", Json.String "events") ]
-              (D.SyncFetched !newChannelRaw) <- D.fetch $ DR.CreateGuildChannel gid newChan
-              let !newChannel = (unsafeCoerce newChannelRaw :: D.Channel)
-              pure $ D.channelId newChannel
-          liftIO $ (insertServerQuery database) (snowflakeToInt gid) (snowflakeToInt channelId)
-          pure ()
+      channel <- setupServer gid
+      setupChannel gid channel
+      pure ()
+
+  D.with D.GuildCreateEvent $ \msg@D.Guild{..} -> do
+    channel <- setupServer guildId
+    setupChannel guildId channel
+    pure ()
 
   D.with D.MessageCreateEvent $ \msg@D.Message{..} -> do
     D.when (not $ D.userIsBot messageAuthor) $ do
@@ -108,6 +104,29 @@ discord timeZone googleEnv calendar database = do
           (EventCommand InvalidEventCommand) -> do
             reply msg "Invalid command.  Help..."
             pure ()
+
+  where
+    setupServer gid = do
+      (serverQuery database) (snowflakeToInt gid) >>= \case
+        Just row -> pure $ intToSnowflake (channelId row)
+        Nothing -> do
+          (D.SyncFetched !channelsRaw) <- D.fetch $ DR.GetGuildChannels gid
+          let !channels = (unsafeCoerce channelsRaw :: [D.Channel])
+              maybeChannel = F.find (\(_, name) -> name == "events") (mapMaybe maybeTextChannelName channels)
+          channelId <- case maybeChannel of
+            Just (channelId, _) -> pure channelId
+            Nothing -> do
+              let newChan = Json.Object $ fromList [ ("name", Json.String "events") ]
+              (D.SyncFetched !newChannelRaw) <- D.fetch $ DR.CreateGuildChannel gid newChan
+              let !newChannel = (unsafeCoerce newChannelRaw :: D.Channel)
+              pure $ D.channelId newChannel
+          let gid64 = snowflakeToInt gid
+              channelId64 = snowflakeToInt channelId
+          rowId <- (insertServerQuery database) gid64 channelId64
+          pure $ channelId
+    setupChannel gid channelId = do
+      (messagesQuery database) (snowflakeToInt gid) >>= \case
+      pure ()
 
 reply :: D.Message -> Text -> P.Effect D.DiscordM ()
 reply D.Message{D.messageChannel=chan} cont = D.fetch' $ D.CreateMessage chan cont Nothing
